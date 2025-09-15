@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Pull Request Format",
+  "description": "Required format for agent-created pull requests",
+  "type": "object",
+  "required": ["title", "body", "base", "head"],
+  "properties": {
+    "title": {
+      "type": "string",
+      "pattern": "^\\[AI Agent\\] Issue #\\d+: .+$",
+      "description": "PR title following convention",
+      "examples": [
+        "[AI Agent] Issue #42: Code review results",
+        "[AI Agent] Issue #43: FastAPI research findings"
+      ]
+    },
+    "body": {
+      "type": "string",
+      "description": "PR description with results",
+      "minLength": 1,
+      "maxLength": 65536
+    },
+    "base": {
+      "type": "string",
+      "pattern": "^(main|gitaiteams/issue-\\d+)$",
+      "description": "Target branch for merge"
+    },
+    "head": {
+      "type": "string",
+      "pattern": "^gitaiteams/issue-\\d+(-child-\\d+)?$",
+      "description": "Source branch with changes"
+    },
+    "labels": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["ai-generated", "auto-merge", "child-result"]
+      },
+      "description": "Labels to apply to PR"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "head": {
+            "pattern": "-child-\\d+$"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "base": {
+            "pattern": "^gitaiteams/issue-\\d+$",
+            "description": "Child PRs must target parent branch"
+          }
+        }
+      }
+    }
+  ],
+  "examples": [
+    {
+      "title": "[AI Agent] Issue #42: Code review completed",
+      "body": "## Results\n\nCode review findings...",
+      "base": "main",
+      "head": "gitaiteams/issue-42",
+      "labels": ["ai-generated"]
+    },
+    {
+      "title": "[AI Agent] Issue #43: FastAPI research",
+      "body": "## Research Results\n\nFastAPI findings...",
+      "base": "gitaiteams/issue-43",
+      "head": "gitaiteams/issue-43-child-1",
+      "labels": ["ai-generated", "child-result"]
+    }
+  ]
+}

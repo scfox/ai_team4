@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Issue Comment Format",
+  "description": "Format for AI agent responses in issue comments",
+  "type": "object",
+  "required": ["body"],
+  "properties": {
+    "body": {
+      "type": "string",
+      "maxLength": 65536,
+      "description": "Comment content in markdown"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "agent_type": {
+          "type": "string",
+          "enum": ["root", "status", "error", "result"],
+          "description": "Type of comment"
+        },
+        "issue_number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "execution_time_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Time taken to execute"
+        },
+        "children_spawned": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "Whether results were truncated"
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "body": {
+          "pattern": "^## 🤖 GitAI Teams Response",
+          "description": "Final result comment"
+        }
+      }
+    },
+    {
+      "properties": {
+        "body": {
+          "pattern": "^## ⏳ Status Update",
+          "description": "Progress update comment"
+        }
+      }
+    },
+    {
+      "properties": {
+        "body": {
+          "pattern": "^## ❌ Error",
+          "description": "Error notification comment"
+        }
+      }
+    }
+  ],
+  "examples": [
+    {
+      "body": "## 🤖 GitAI Teams Response\n\n### Code Review Results\n\nYour function has been reviewed...",
+      "metadata": {
+        "agent_type": "result",
+        "issue_number": 42,
+        "execution_time_ms": 45000,
+        "children_spawned": 0,
+        "truncated": false
+      }
+    },
+    {
+      "body": "## ⏳ Status Update\n\nSpawning 2 child agents to research frameworks in parallel...",
+      "metadata": {
+        "agent_type": "status",
+        "issue_number": 43,
+        "children_spawned": 2
+      }
+    },
+    {
+      "body": "## ❌ Error\n\nNot sure what you are asking me to do here. Please provide a clear task description.",
+      "metadata": {
+        "agent_type": "error",
+        "issue_number": 44
+      }
+    }
+  ]
+}
