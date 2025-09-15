@@ -42,7 +42,13 @@ GitAI Teams is a GitHub Actions-based multi-agent system that responds to @gitai
 
 ### Single Task Execution
 
-1. **Create or comment on an issue** with @gitaiteams mention:
+1. **Create an issue or add a comment** with @gitaiteams mention:
+
+   You can trigger GitAI Teams in two ways:
+   - **New Issue**: Include @gitaiteams in the issue body when creating it
+   - **Issue Comment**: Add @gitaiteams in any comment on an existing issue
+
+   Example:
    ```markdown
    @gitaiteams
 

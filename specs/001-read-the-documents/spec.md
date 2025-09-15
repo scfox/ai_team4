@@ -37,7 +37,7 @@
 ## User Scenarios & Testing
 
 ### Primary User Story
-A GitHub user wants to trigger AI agents to complete tasks by mentioning @gitaiteams in issue comments. The system should automatically determine whether to handle the task directly or spawn parallel agents for efficiency, then post a comprehensive response back to the issue.
+A GitHub user wants to trigger AI agents to complete tasks by mentioning @gitaiteams in GitHub issues (when created) or issue comments. The system should automatically determine whether to handle the task directly or spawn parallel agents for efficiency, then post a comprehensive response back to the issue.
 
 ### Acceptance Scenarios
 1. **Given** a GitHub issue with a code review request, **When** user mentions @gitaiteams with a single task, **Then** system executes the task directly and posts review suggestions to the issue
@@ -54,7 +54,7 @@ A GitHub user wants to trigger AI agents to complete tasks by mentioning @gitait
 ## Requirements
 
 ### Functional Requirements
-- **FR-001**: System MUST respond to @gitaiteams mentions in GitHub issue comments
+- **FR-001**: System MUST respond to @gitaiteams mentions in GitHub issues (on creation) and issue comments
 - **FR-002**: System MUST automatically determine if tasks can be parallelized
 - **FR-003**: System MUST spawn child agents for parallelizable subtasks (maximum 1 level deep)
 - **FR-004**: System MUST prevent recursive agent spawning (children cannot have children)
@@ -68,8 +68,8 @@ A GitHub user wants to trigger AI agents to complete tasks by mentioning @gitait
 - **FR-012**: System MUST provide status updates during long-running tasks at least every 5 minutes
 
 ### Key Entities
-- **GitHub Issue**: Represents the user's request, contains the @gitaiteams mention and task description
-- **Root Agent**: Primary agent triggered by @gitaiteams mention, can spawn child agents
+- **GitHub Issue**: Represents the user's request, contains the @gitaiteams mention and task description (in issue body or comments)
+- **Root Agent**: Primary agent triggered by @gitaiteams mention in issue or comment, can spawn child agents
 - **Child Agent**: Secondary agent spawned by root for parallel task execution, cannot spawn additional agents
 - **Task Result**: Output from agent execution, can be code review, research findings, or analysis
 - **Combined Response**: Unified result merging all child agent outputs for presentation to user

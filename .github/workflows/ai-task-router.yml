@@ -2,6 +2,8 @@ name: AI Task Router
 # T016: Detects @gitaiteams mentions and triggers orchestrator
 
 on:
+  issues:
+    types: [opened]
   issue_comment:
     types: [created]
 
@@ -10,10 +12,13 @@ jobs:
     name: Route AI Task
     runs-on: ubuntu-latest
 
-    # Only run if comment contains @gitaiteams
+    # Only run if @gitaiteams is mentioned in issue body or comment
     if: |
       github.event.issue.pull_request == null &&
-      contains(github.event.comment.body, '@gitaiteams')
+      (
+        (github.event_name == 'issues' && contains(github.event.issue.body, '@gitaiteams')) ||
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@gitaiteams'))
+      )
 
     permissions:
       contents: read
@@ -32,9 +37,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Add eyes reaction to acknowledge mention
-          gh api --method POST \
-            "/repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
-            -f content='eyes' || echo "Failed to add reaction"
+          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            gh api --method POST \
+              "/repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+              -f content='eyes' || echo "Failed to add reaction"
+          else
+            # For issues, add reaction to the issue itself
+            gh api --method POST \
+              "/repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/reactions" \
+              -f content='eyes' || echo "Failed to add reaction"
+          fi
 
       - name: Add trigger label
         env:
@@ -48,24 +60,27 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_env: |
+            GH_TOKEN=${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             You are the GitAI Teams router. A user mentioned @gitaiteams in issue #${{ github.event.issue.number }}.
 
             CRITICAL: You must trigger the orchestrator using repository_dispatch.
 
-            The comment was:
+            The task description is:
             """
-            ${{ github.event.comment.body }}
+            ${{ github.event_name == 'issues' && github.event.issue.body || github.event.comment.body }}
             """
 
             Execute this command to trigger the orchestrator:
             ```bash
+            # The CLAUDE_CODE_OAUTH_TOKEN is already set as GH_TOKEN in your environment
             gh api /repos/${{ github.repository }}/dispatches \
               --method POST \
               --field event_type=orchestrate_task \
               --field client_payload[issue_number]=${{ github.event.issue.number }} \
-              --field client_payload[comment_id]=${{ github.event.comment.id }} \
-              --field client_payload[task]="${{ github.event.comment.body }}"
+              --field client_payload[comment_id]=${{ github.event_name == 'issue_comment' && github.event.comment.id || 0 }} \
+              --field client_payload[task]="${{ github.event_name == 'issues' && github.event.issue.body || github.event.comment.body }}"
             ```
 
             This will trigger the ai-task-orchestrator workflow to handle the task.
