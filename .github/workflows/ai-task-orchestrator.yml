@@ -45,6 +45,20 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: Create or update status comment
+        id: status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          # Create or find status comment
+          STATUS_COMMENT_ID=$(./scripts/bash/update_status_comment.sh \
+            "${{ github.event.client_payload.issue_number }}" \
+            "initializing" \
+            "Setting up environment...")
+          echo "STATUS_COMMENT_ID=$STATUS_COMMENT_ID" >> $GITHUB_ENV
+          echo "status_comment_id=$STATUS_COMMENT_ID" >> $GITHUB_OUTPUT
+
       - name: Process task with Claude
         uses: anthropics/claude-code-action@v1
         with:
@@ -59,17 +73,25 @@ jobs:
             ${{ github.event.client_payload.task }}
             """
 
+            STATUS COMMENT ID: ${{ env.STATUS_COMMENT_ID }}
+
             Your responsibilities:
             1. Analyze if the task needs parallelization (use scripts/python/analyze_task.py if it exists)
             2. For single tasks: Execute directly and post results to the issue
             3. For parallel tasks: Create child branches and spawn child agents
 
-            IMPORTANT: Due to GitHub token limitations, you MUST execute all repository_dispatch commands from within this Claude action context.
+            CRITICAL STATUS UPDATE RULES - MUST FOLLOW:
+            - NEVER create new issue comments for status updates
+            - ALWAYS use ./scripts/bash/update_status_comment.sh for ALL status updates
+            - The status comment already exists (ID: ${{ env.STATUS_COMMENT_ID }})
+            - Only use gh issue comment for FINAL RESULTS, not status
 
             For single tasks:
+            - Update status: ./scripts/bash/update_status_comment.sh ${{ github.event.client_payload.issue_number }} "processing" "Executing task directly..."
             - Process the task
             - Track execution time using: START_TIME=$(date +%s%3N)
-            - Post results using scripts/bash/post_comment.sh:
+            - Update status when done: ./scripts/bash/update_status_comment.sh ${{ github.event.client_payload.issue_number }} "completed" "Task completed successfully"
+            - Post FINAL RESULTS using scripts/bash/post_comment.sh:
             ```bash
             END_TIME=$(date +%s%3N)
             EXEC_TIME=$((END_TIME - START_TIME))
@@ -78,11 +100,9 @@ jobs:
 
             For parallel tasks requiring children:
             1. Create parent branch: gitaiteams/issue-${{ github.event.client_payload.issue_number }}
-            2. Post initial status using scripts/bash/post_comment.sh:
-            ```bash
-            ./scripts/bash/post_comment.sh status ${{ github.event.client_payload.issue_number }} "Analyzing task and preparing to spawn child agents..." 0
-            ```
-            3. For each subtask, spawn a child using:
+            2. Update status: ./scripts/bash/update_status_comment.sh ${{ github.event.client_payload.issue_number }} "analyzing" "Determining task approach..."
+            3. Update status: ./scripts/bash/update_status_comment.sh ${{ github.event.client_payload.issue_number }} "spawning" "Creating child agents..." "gitaiteams/issue-${{ github.event.client_payload.issue_number }}"
+            4. For each subtask, spawn a child using:
             ```bash
             gh api /repos/${{ github.repository }}/dispatches \
               --method POST \
@@ -90,12 +110,10 @@ jobs:
               --field client_payload[issue_number]=${{ github.event.client_payload.issue_number }} \
               --field client_payload[parent_branch]=gitaiteams/issue-${{ github.event.client_payload.issue_number }} \
               --field client_payload[child_number]=1 \
-              --field client_payload[task]="Subtask description"
+              --field client_payload[task]="Subtask description" \
+              --field client_payload[status_comment_id]=${{ env.STATUS_COMMENT_ID }}
             ```
-            4. Post status update after spawning all children:
-            ```bash
-            ./scripts/bash/post_comment.sh status ${{ github.event.client_payload.issue_number }} "All child agents have been spawned and are working in parallel. Results will be combined when complete." N
-            ```
+            5. Update status after spawning: ./scripts/bash/update_status_comment.sh ${{ github.event.client_payload.issue_number }} "processing" "Child agents executing (N spawned)..." "gitaiteams/issue-${{ github.event.client_payload.issue_number }}"
 
             Remember:
             - Max 5 child agents (constitution limit)
