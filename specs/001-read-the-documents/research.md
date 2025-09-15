@@ -183,6 +183,7 @@
 - pull-requests: write (for PR creation)
 - actions: write (for repository_dispatch)
 - workflows: write (for workflow triggering)
+- id-token: write (for OIDC authentication with Claude)
 
 ### Input Validation
 **Decision**: Validate all user input before execution
