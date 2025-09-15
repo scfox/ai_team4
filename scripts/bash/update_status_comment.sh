@@ -6,16 +6,16 @@ set -euo pipefail
 
 # Configuration
 STATUS_MARKER="<!-- gitai-status-comment -->"
-REPO="${GITHUB_REPOSITORY:-}"
 
 # Find existing status comment or create new one
 find_or_create_status_comment() {
     local issue_number="$1"
     local initial_status="$2"
+    local repo="${GITHUB_REPOSITORY:-}"
 
     # Try to find existing status comment with our marker
     local comment_id
-    comment_id=$(gh api "/repos/${REPO}/issues/${issue_number}/comments" \
+    comment_id=$(gh api "/repos/${repo}/issues/${issue_number}/comments" \
         --jq ".[] | select(.body | contains(\"${STATUS_MARKER}\")) | .id" \
         2>/dev/null | head -1) || true
 
@@ -31,7 +31,7 @@ find_or_create_status_comment() {
 
         # Create comment and extract ID
         comment_id=$(gh issue comment "${issue_number}" \
-            --repo "${REPO}" \
+            --repo "${repo}" \
             --body "${body}" \
             2>&1 | grep -oE '[0-9]+$') || {
             echo "ERROR: Failed to create status comment" >&2
@@ -53,10 +53,11 @@ update_comment() {
     local status="$3"
     local message="${4:-Processing...}"
     local branch="${5:-}"
+    local repo="${GITHUB_REPOSITORY:-}"
 
     # Get existing comment to preserve start time
     local existing_body
-    existing_body=$(gh api "/repos/${REPO}/issues/comments/${comment_id}" \
+    existing_body=$(gh api "/repos/${repo}/issues/comments/${comment_id}" \
         --jq '.body' 2>/dev/null) || true
 
     # Extract start time from existing comment
@@ -129,7 +130,7 @@ update_comment() {
     fi
 
     # Update the comment
-    gh api "/repos/${REPO}/issues/comments/${comment_id}" \
+    gh api "/repos/${repo}/issues/comments/${comment_id}" \
         --method PATCH \
         --field body="${new_body}" || {
         echo "ERROR: Failed to update status comment" >&2
@@ -147,13 +148,9 @@ main() {
     local branch="${4:-}"
 
     # Ensure we have required environment
-    if [[ -z "${REPO}" ]]; then
-        if [[ -n "${GITHUB_REPOSITORY:-}" ]]; then
-            REPO="${GITHUB_REPOSITORY}"
-        else
-            echo "ERROR: GITHUB_REPOSITORY not set" >&2
-            exit 1
-        fi
+    if [[ -z "${GITHUB_REPOSITORY:-}" ]]; then
+        echo "ERROR: GITHUB_REPOSITORY not set" >&2
+        exit 1
     fi
 
     # Ensure we have GH token
