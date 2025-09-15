@@ -1,0 +1,103 @@
+name: AI Task Orchestrator
+# T017: Main orchestration logic, spawns children if needed
+
+on:
+  repository_dispatch:
+    types: [orchestrate_task]
+
+# Concurrency control per issue
+concurrency:
+  group: orchestrator-issue-${{ github.event.client_payload.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  orchestrate:
+    name: Orchestrate Task
+    runs-on: ubuntu-latest
+    timeout-minutes: 10  # Constitution: parallel task < 10 min
+
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      actions: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Make scripts executable
+        run: |
+          chmod +x scripts/bash/*.sh
+          chmod +x scripts/python/*.py
+
+      - name: Configure git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Process task with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            You are the GitAI Teams orchestrator for issue #${{ github.event.client_payload.issue_number }}.
+
+            Task from user:
+            """
+            ${{ github.event.client_payload.task }}
+            """
+
+            Your responsibilities:
+            1. Analyze if the task needs parallelization (use scripts/python/analyze_task.py if it exists)
+            2. For single tasks: Execute directly and post results to the issue
+            3. For parallel tasks: Create child branches and spawn child agents
+
+            IMPORTANT: Due to GitHub token limitations, you MUST execute all repository_dispatch commands from within this Claude action context.
+
+            For single tasks:
+            - Process the task
+            - Track execution time using: START_TIME=$(date +%s%3N)
+            - Post results using scripts/bash/post_comment.sh:
+            ```bash
+            END_TIME=$(date +%s%3N)
+            EXEC_TIME=$((END_TIME - START_TIME))
+            ./scripts/bash/post_comment.sh result ${{ github.event.client_payload.issue_number }} "Your results here" $EXEC_TIME 0
+            ```
+
+            For parallel tasks requiring children:
+            1. Create parent branch: gitaiteams/issue-${{ github.event.client_payload.issue_number }}
+            2. Post initial status using scripts/bash/post_comment.sh:
+            ```bash
+            ./scripts/bash/post_comment.sh status ${{ github.event.client_payload.issue_number }} "Analyzing task and preparing to spawn child agents..." 0
+            ```
+            3. For each subtask, spawn a child using:
+            ```bash
+            gh api /repos/${{ github.repository }}/dispatches \
+              --method POST \
+              --field event_type=child_task \
+              --field client_payload[issue_number]=${{ github.event.client_payload.issue_number }} \
+              --field client_payload[parent_branch]=gitaiteams/issue-${{ github.event.client_payload.issue_number }} \
+              --field client_payload[child_number]=1 \
+              --field client_payload[task]="Subtask description"
+            ```
+            4. Post status update after spawning all children:
+            ```bash
+            ./scripts/bash/post_comment.sh status ${{ github.event.client_payload.issue_number }} "All child agents have been spawned and are working in parallel. Results will be combined when complete." N
+            ```
+
+            Remember:
+            - Max 5 child agents (constitution limit)
+            - No grandchildren (single-level parallelism only)
+            - Stateless architecture (no STATE.json)
+            - Branch naming: gitaiteams/issue-N and gitaiteams/issue-N-child-M
+
+            Execute the appropriate commands based on your analysis of the task.

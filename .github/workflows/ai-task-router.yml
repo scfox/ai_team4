@@ -1,0 +1,72 @@
+name: AI Task Router
+# T016: Detects @gitaiteams mentions and triggers orchestrator
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  route:
+    name: Route AI Task
+    runs-on: ubuntu-latest
+
+    # Only run if comment contains @gitaiteams
+    if: |
+      github.event.issue.pull_request == null &&
+      contains(github.event.comment.body, '@gitaiteams')
+
+    permissions:
+      contents: read
+      issues: write
+      actions: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add eyes reaction
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Add eyes reaction to acknowledge mention
+          gh api --method POST \
+            "/repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content='eyes' || echo "Failed to add reaction"
+
+      - name: Add trigger label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Add label to track AI tasks
+          gh issue edit ${{ github.event.issue.number }} \
+            --add-label "trigger:ai-task" || echo "Label might already exist"
+
+      - name: Trigger orchestrator via Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            You are the GitAI Teams router. A user mentioned @gitaiteams in issue #${{ github.event.issue.number }}.
+
+            CRITICAL: You must trigger the orchestrator using repository_dispatch.
+
+            The comment was:
+            """
+            ${{ github.event.comment.body }}
+            """
+
+            Execute this command to trigger the orchestrator:
+            ```bash
+            gh api /repos/${{ github.repository }}/dispatches \
+              --method POST \
+              --field event_type=orchestrate_task \
+              --field client_payload[issue_number]=${{ github.event.issue.number }} \
+              --field client_payload[comment_id]=${{ github.event.comment.id }} \
+              --field client_payload[task]="${{ github.event.comment.body }}"
+            ```
+
+            This will trigger the ai-task-orchestrator workflow to handle the task.
+
+            IMPORTANT: You MUST execute the gh api command above. This is the only way to trigger the orchestrator due to GitHub token limitations.
