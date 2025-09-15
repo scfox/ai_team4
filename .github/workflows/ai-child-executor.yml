@@ -1,0 +1,124 @@
+name: AI Child Executor
+# T018: Executes tasks as child agents
+
+on:
+  repository_dispatch:
+    types: [child_task]
+
+# Concurrency control per child
+concurrency:
+  group: child-${{ github.event.client_payload.issue_number }}-${{ github.event.client_payload.child_number }}
+  cancel-in-progress: false
+
+jobs:
+  execute_child:
+    name: Execute Child Task
+    runs-on: ubuntu-latest
+    timeout-minutes: 8  # Constitution: child timeout 8 min
+
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Make scripts executable
+        run: |
+          chmod +x scripts/bash/*.sh
+          chmod +x scripts/python/*.py
+
+      - name: Configure git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create child branch
+        run: |
+          # Create and checkout child branch
+          CHILD_BRANCH="gitaiteams/issue-${{ github.event.client_payload.issue_number }}-child-${{ github.event.client_payload.child_number }}"
+          git checkout -b "$CHILD_BRANCH"
+          echo "CHILD_BRANCH=$CHILD_BRANCH" >> $GITHUB_ENV
+
+      - name: Execute child task with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            You are child agent #${{ github.event.client_payload.child_number }} for issue #${{ github.event.client_payload.issue_number }}.
+
+            Your task:
+            """
+            ${{ github.event.client_payload.task }}
+            """
+
+            Your responsibilities:
+            1. Execute the assigned task
+            2. Save results to RESULTS.md in the current directory
+            3. Commit and push your changes
+            4. Create a PR to the parent branch
+
+            IMPORTANT constraints:
+            - You CANNOT spawn other agents (no grandchildren allowed)
+            - You must complete within 8 minutes
+            - Your branch: ${{ env.CHILD_BRANCH }}
+            - Parent branch: ${{ github.event.client_payload.parent_branch }}
+
+            Steps to execute:
+            1. Post starting status:
+            ```bash
+            ./scripts/bash/post_comment.sh status ${{ github.event.client_payload.issue_number }} "Child agent #${{ github.event.client_payload.child_number }} has started working on their assigned task" 0
+            ```
+            2. Perform the task (research, analysis, etc.)
+            3. Write results to RESULTS.md:
+            ```bash
+            cat > RESULTS.md << 'EOF'
+            # Child Agent ${{ github.event.client_payload.child_number }} Results
+
+            ## Task
+            ${{ github.event.client_payload.task }}
+
+            ## Results
+            [Your findings here]
+
+            ## Summary
+            [Key points]
+            EOF
+            ```
+
+            4. Commit and push:
+            ```bash
+            git add RESULTS.md
+            git commit -m "[AI Agent] Child ${{ github.event.client_payload.child_number }} results for issue #${{ github.event.client_payload.issue_number }}"
+            git push origin ${{ env.CHILD_BRANCH }}
+            ```
+
+            5. Create PR to parent:
+            ```bash
+            gh pr create \
+              --base "${{ github.event.client_payload.parent_branch }}" \
+              --head "${{ env.CHILD_BRANCH }}" \
+              --title "[AI Agent] Issue #${{ github.event.client_payload.issue_number }}: Child ${{ github.event.client_payload.child_number }} results" \
+              --body "## Results from Child Agent ${{ github.event.client_payload.child_number }}
+
+            Task completed. Results are in RESULTS.md.
+
+            Parent issue: #${{ github.event.client_payload.issue_number }}"
+            ```
+
+            6. Post completion status:
+            ```bash
+            ./scripts/bash/post_comment.sh status ${{ github.event.client_payload.issue_number }} "Child agent #${{ github.event.client_payload.child_number }} has completed their task and created a PR with results" 0
+            ```
+
+            Execute these steps now.

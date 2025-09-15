@@ -1,0 +1,37 @@
+# Workflow Execution Trace
+
+trigger:
+  type: issue_comment
+  content: "@gitaiteams"
+  issue_number: 42
+
+workflow_runs:
+  - id: 1
+    name: "GitAI Teams Router"
+    trigger: issue_comment
+    actions:
+      - detect: "@gitaiteams mention"
+      - label: "Add trigger:ai-task"
+      - dispatch: "repository_dispatch to orchestrator"
+
+  - id: 2
+    name: "GitAI Teams Orchestrator"
+    trigger: repository_dispatch
+    actions:
+      - analyze: "Task requires code review"
+      - decide: "No children needed"
+      - execute: "Direct Claude execution"
+      - respond: "Post review to issue #42"
+      - complete: "Exit successfully"
+
+total_runs: 2
+children_spawned: 0
+prs_created: 0
+branches_created: 0
+
+timeline:
+  - "00:00": "User posts @gitaiteams comment"
+  - "00:01": "Router adds label and dispatches"
+  - "00:02": "Orchestrator executes task"
+  - "00:03": "Review posted to issue"
+  - "00:04": "Complete"

@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Repository Dispatch Payload",
+  "description": "Payload for triggering child agents or orchestrator",
+  "type": "object",
+  "required": ["event_type", "client_payload"],
+  "properties": {
+    "event_type": {
+      "type": "string",
+      "enum": ["orchestrate_task", "child_task"],
+      "description": "Type of task to execute"
+    },
+    "client_payload": {
+      "type": "object",
+      "required": ["issue_number"],
+      "properties": {
+        "issue_number": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "GitHub issue number"
+        },
+        "task": {
+          "type": "string",
+          "maxLength": 10000,
+          "description": "Task description for execution"
+        },
+        "parent_branch": {
+          "type": "string",
+          "pattern": "^gitaiteams/issue-\\d+$",
+          "description": "Parent branch for child agents"
+        },
+        "child_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "description": "Child agent identifier"
+        },
+        "subtasks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "description": "List of subtasks for parallel execution"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "examples": [
+    {
+      "event_type": "orchestrate_task",
+      "client_payload": {
+        "issue_number": 42,
+        "task": "Review this Python function and suggest improvements"
+      }
+    },
+    {
+      "event_type": "child_task",
+      "client_payload": {
+        "issue_number": 43,
+        "task": "Research FastAPI performance",
+        "parent_branch": "gitaiteams/issue-43",
+        "child_number": 1
+      }
+    }
+  ]
+}

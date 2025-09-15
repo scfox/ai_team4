@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Branch Naming Schema",
+  "description": "Required branch naming patterns for GitAI Teams",
+  "type": "object",
+  "properties": {
+    "root_branch": {
+      "type": "string",
+      "pattern": "^gitaiteams/issue-\\d+$",
+      "description": "Branch for root agent",
+      "examples": [
+        "gitaiteams/issue-42",
+        "gitaiteams/issue-123"
+      ]
+    },
+    "child_branch": {
+      "type": "string",
+      "pattern": "^gitaiteams/issue-\\d+-child-\\d+$",
+      "description": "Branch for child agent",
+      "examples": [
+        "gitaiteams/issue-43-child-1",
+        "gitaiteams/issue-43-child-2"
+      ]
+    }
+  },
+  "definitions": {
+    "issue_number": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "GitHub issue number"
+    },
+    "child_number": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "Child agent identifier"
+    }
+  },
+  "patternProperties": {
+    "^gitaiteams/": {
+      "description": "All GitAI Teams branches must start with this prefix"
+    }
+  },
+  "not": {
+    "properties": {
+      "invalid_patterns": {
+        "anyOf": [
+          {
+            "pattern": "child-\\d+-child",
+            "description": "No grandchildren allowed"
+          },
+          {
+            "pattern": "subtask",
+            "description": "Wrong naming convention"
+          },
+          {
+            "pattern": "task",
+            "description": "Wrong naming convention"
+          }
+        ]
+      }
+    }
+  },
+  "examples": [
+    {
+      "valid": [
+        "gitaiteams/issue-1",
+        "gitaiteams/issue-42",
+        "gitaiteams/issue-100-child-1",
+        "gitaiteams/issue-100-child-5"
+      ],
+      "invalid": [
+        "gitaiteams/issue-42-child-1-child-1",
+        "gitaiteams/issue-42-subtask-1",
+        "gitaiteams/task-42",
+        "issue-42",
+        "gitaiteams/issue-42-child-6"
+      ]
+    }
+  ]
+}

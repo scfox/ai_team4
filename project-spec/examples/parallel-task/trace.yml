@@ -1,0 +1,84 @@
+# Workflow Execution Trace
+
+trigger:
+  type: issue_comment
+  content: "@gitaiteams"
+  issue_number: 43
+
+workflow_runs:
+  - id: 1
+    name: "GitAI Teams Router"
+    trigger: issue_comment
+    actions:
+      - detect: "@gitaiteams mention"
+      - label: "Add trigger:ai-task"
+      - dispatch: "repository_dispatch to orchestrator"
+
+  - id: 2
+    name: "GitAI Teams Orchestrator (Root)"
+    trigger: repository_dispatch
+    actions:
+      - analyze: "Task requires parallel research"
+      - branch: "Create gitaiteams/issue-43"
+      - spawn: "Child 1 - FastAPI research"
+      - spawn: "Child 2 - Flask research"
+      - comment: "Update status - 2 agents working"
+      - exit: "Wait for child completion"
+
+  - id: 3
+    name: "GitAI Teams Child Executor #1"
+    trigger: repository_dispatch
+    parallel: true
+    actions:
+      - checkout: "gitaiteams/issue-43-child-1"
+      - execute: "Research FastAPI"
+      - commit: "Add RESULTS.md"
+      - pr: "Create PR to gitaiteams/issue-43"
+      - exit: "Task complete"
+
+  - id: 4
+    name: "GitAI Teams Child Executor #2"
+    trigger: repository_dispatch
+    parallel: true
+    actions:
+      - checkout: "gitaiteams/issue-43-child-2"
+      - execute: "Research Flask"
+      - commit: "Add RESULTS.md"
+      - pr: "Create PR to gitaiteams/issue-43"
+      - exit: "Task complete"
+
+  - id: 5
+    name: "GitAI Teams Orchestrator (Resume)"
+    trigger: pull_request (from child-1)
+    actions:
+      - merge: "Merge child-1 PR"
+      - check: "Child-2 still pending"
+      - exit: "Wait for remaining child"
+
+  - id: 6
+    name: "GitAI Teams Orchestrator (Resume)"
+    trigger: pull_request (from child-2)
+    actions:
+      - merge: "Merge child-2 PR"
+      - check: "All children complete"
+      - combine: "Merge results into comparison"
+      - pr: "Create final PR to main"
+      - comment: "Post results to issue #43"
+      - exit: "Task complete"
+
+total_runs: 6
+children_spawned: 2
+prs_created: 3
+branches_created: 3
+
+timeline:
+  - "00:00": "User posts @gitaiteams comment"
+  - "00:01": "Router adds label and dispatches"
+  - "00:02": "Orchestrator creates branch and spawns 2 children"
+  - "00:03": "Both children start researching in parallel"
+  - "00:15": "Child-1 completes, creates PR"
+  - "00:16": "Orchestrator merges child-1"
+  - "00:18": "Child-2 completes, creates PR"
+  - "00:19": "Orchestrator merges child-2"
+  - "00:20": "Orchestrator creates final PR to main"
+  - "00:21": "Results posted to issue"
