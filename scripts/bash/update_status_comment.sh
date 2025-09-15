@@ -4,6 +4,7 @@
 
 set -euo pipefail
 
+
 # Configuration
 STATUS_MARKER="<!-- gitai-status-comment -->"
 
@@ -171,6 +172,6 @@ main() {
 }
 
 # Run if not sourced
-if [[ "${BASH_SOURCE[0]}" == "${0}}" ]]; then
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     main "$@"
 fi
