@@ -60,29 +60,25 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_env: |
-            GH_TOKEN=${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: |
+            --allowed-tools Bash(gh:*)
           prompt: |
             You are the GitAI Teams router. A user mentioned @gitaiteams in issue #${{ github.event.issue.number }}.
 
             CRITICAL: You must trigger the orchestrator using repository_dispatch.
 
-            The task description is:
-            """
-            ${{ github.event_name == 'issues' && github.event.issue.body || github.event.comment.body }}
-            """
+            Issue Number: ${{ github.event.issue.number }}
+            Comment ID: ${{ github.event_name == 'issue_comment' && github.event.comment.id || 'none' }}
+            Task: ${{ github.event_name == 'issues' && github.event.issue.body || github.event.comment.body }}
 
-            Execute this command to trigger the orchestrator:
+            Execute this gh command to trigger the orchestrator:
             ```bash
-            # The CLAUDE_CODE_OAUTH_TOKEN is already set as GH_TOKEN in your environment
-            gh api /repos/${{ github.repository }}/dispatches \
+            gh api "repos/${{ github.repository }}/dispatches" \
               --method POST \
-              --field event_type=orchestrate_task \
-              --field client_payload[issue_number]=${{ github.event.issue.number }} \
-              --field client_payload[comment_id]=${{ github.event_name == 'issue_comment' && github.event.comment.id || 0 }} \
-              --field client_payload[task]="${{ github.event_name == 'issues' && github.event.issue.body || github.event.comment.body }}"
+              -f event_type="orchestrate_task" \
+              -f client_payload='{"issue_number":"${{ github.event.issue.number }}","comment_id":"${{ github.event_name == 'issue_comment' && github.event.comment.id || 0 }}","task":"${{ github.event_name == 'issues' && github.event.issue.body || github.event.comment.body }}"}'
             ```
 
             This will trigger the ai-task-orchestrator workflow to handle the task.
 
-            IMPORTANT: You MUST execute the gh api command above. This is the only way to trigger the orchestrator due to GitHub token limitations.
+            IMPORTANT: You MUST execute the gh api command above. The CLAUDE_CODE_OAUTH_TOKEN is already available in your environment.
