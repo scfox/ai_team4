@@ -59,6 +59,12 @@ jobs:
           echo "STATUS_COMMENT_ID=$STATUS_COMMENT_ID" >> $GITHUB_ENV
           echo "status_comment_id=$STATUS_COMMENT_ID" >> $GITHUB_OUTPUT
 
+          # Create parent branch to prevent race condition with child PRs
+          PARENT_BRANCH="gitaiteams/issue-${{ github.event.client_payload.issue_number }}"
+          echo "Creating parent branch: $PARENT_BRANCH"
+          git checkout -b "$PARENT_BRANCH" origin/main
+          git push origin "$PARENT_BRANCH" 2>/dev/null || echo "Parent branch may already exist"
+
       - name: Process task with Claude
         uses: anthropics/claude-code-action@v1
         with:
@@ -99,7 +105,7 @@ jobs:
             ```
 
             For parallel tasks requiring children:
-            1. Create parent branch: gitaiteams/issue-${{ github.event.client_payload.issue_number }}
+            1. Parent branch gitaiteams/issue-${{ github.event.client_payload.issue_number }} already exists (created above)
             2. Update status: ./scripts/bash/update_status_comment.sh ${{ github.event.client_payload.issue_number }} "analyzing" "Determining task approach..."
             3. Update status: ./scripts/bash/update_status_comment.sh ${{ github.event.client_payload.issue_number }} "spawning" "Creating child agents..." "gitaiteams/issue-${{ github.event.client_payload.issue_number }}"
             4. For each subtask, spawn a child using:
