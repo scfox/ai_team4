@@ -47,6 +47,28 @@
 - ✅ T034 Verify branch naming patterns match constitution
 - ✅ T035 Final validation: No state files, all operations stateless
 
+## Feature 002: Completion Detection System
+
+### Phase 3.4: Workflow Integration (5/5)
+- ✅ T016 Add completion check job to ai-task-router.yml with comment trigger
+- ✅ T017 Create ai-completion-analyzer.yml for repository_dispatch handling
+- ✅ T018 Add repository_dispatch trigger when count threshold is met
+- ✅ T019 Configure Claude agent invocation with proper system prompt
+- ✅ T020 Add error handling and fallback strategy to workflows
+
+### Phase 3.5: Integration Tests (4/4)
+- ✅ T021 Create integration test script test_completion_flow.sh
+- ✅ T022 Test scenario: all children succeed with PRs
+- ✅ T023 Test scenario: partial failure (2 succeed, 1 fails)
+- ✅ T024 Test scenario: ambiguous status handling
+
+### Phase 3.6: Polish & Documentation (5/5)
+- ✅ T025 Update CLAUDE.md with completion detection commands and configuration
+- ✅ T026 Add logging to Python scripts using standard logging module
+- ✅ T027 Create llms.txt documentation for count_completions.py and analyze_completions.py
+- ✅ T028 Run quickstart scenarios from specs/002-completion-detection-as/quickstart.md
+- ✅ T029 Performance validation: ensure detection < 2s, analysis < 60s
+
 ## ✅ All Tasks Complete!
 
 ## Key Achievements

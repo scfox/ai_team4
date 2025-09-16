@@ -1,0 +1,161 @@
+name: AI Completion Analyzer
+# T017, T019: Analyzes child agent completions and makes merge decisions
+
+on:
+  repository_dispatch:
+    types: [analyze_completions]
+
+jobs:
+  analyze:
+    name: Analyze Child Completions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Get issue data
+        id: issue-data
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_NUMBER="${{ github.event.client_payload.issue_number }}"
+
+          # Get all comments for detailed analysis
+          COMMENTS=$(gh api "repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments" --paginate)
+
+          # Filter for child agent comments
+          CHILD_COMMENTS=$(echo "$COMMENTS" | jq '[.[] | select(.body | contains("🤖 Child"))]')
+
+          # Get issue details
+          ISSUE=$(gh api "repos/${{ github.repository }}/issues/${ISSUE_NUMBER}")
+          ISSUE_TITLE=$(echo "$ISSUE" | jq -r '.title')
+
+          # Save for Claude analysis
+          echo "issue_number=${ISSUE_NUMBER}" >> $GITHUB_OUTPUT
+          echo "issue_title=${ISSUE_TITLE}" >> $GITHUB_OUTPUT
+          echo "child_comments<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHILD_COMMENTS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # Count PRs mentioned
+          PR_COUNT=$(echo "$CHILD_COMMENTS" | jq '[.[] | .body | scan("#[0-9]+") | unique] | length')
+          echo "pr_count=${PR_COUNT}" >> $GITHUB_OUTPUT
+
+      # T019: Configure Claude agent invocation with proper system prompt
+      - name: Analyze completions with Claude
+        id: claude-analysis
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: |
+            --allowed-tools Bash(gh:*)
+          prompt: |
+            You are the GitAI Teams Completion Analyzer. Your role is to analyze child agent status reports and make intelligent decisions about how to proceed.
+
+            ## Context
+            Issue: #${{ steps.issue-data.outputs.issue_number }} - ${{ steps.issue-data.outputs.issue_title }}
+            Child Count: ${{ github.event.client_payload.child_count }}
+            Expected Count: ${{ github.event.client_payload.expected_count }}
+            PRs Mentioned: ${{ steps.issue-data.outputs.pr_count }}
+
+            ## Child Agent Status Reports
+            ```json
+            ${{ steps.issue-data.outputs.child_comments }}
+            ```
+
+            ## Your Tasks:
+            1. Analyze each child agent's status report
+            2. Determine overall completion status (all-success, partial-success, or failure)
+            3. Make decisions about merging PRs
+            4. Post a comprehensive analysis to the issue
+
+            ## Decision Framework:
+            - **All Success**: All children report success → Merge all PRs and create consolidation PR
+            - **Partial Success**: Some succeed, some fail → Analyze impact and merge successful PRs if safe
+            - **Ambiguous Status**: Unclear reports → Request clarification or proceed conservatively
+            - **All Failed**: All children failed → Document issues and suggest next steps
+
+            ## Actions to Execute:
+
+            1. First, analyze the child comments and create a summary comment:
+            ```bash
+            gh issue comment ${{ steps.issue-data.outputs.issue_number }} --body "## 🤖 Completion Analysis
+
+            **Summary**: [Your analysis of child statuses]
+
+            ### Child Agent Reports:
+            [List each child and their status]
+
+            ### Decision:
+            [Your recommendation: merge-all, merge-partial, or wait]
+
+            ### Rationale:
+            [Explain your reasoning]
+
+            ### Next Steps:
+            [What will happen next]
+            "
+            ```
+
+            2. If merging is appropriate, merge the PRs:
+            ```bash
+            # For each successful PR mentioned in comments:
+            # gh pr merge [PR_NUMBER] --merge --body "Automated merge by completion analyzer"
+            ```
+
+            3. If all PRs are merged successfully, create a consolidation PR:
+            ```bash
+            # Create branch from all merged work
+            # gh pr create --title "Consolidation: Issue #${{ steps.issue-data.outputs.issue_number }}" ...
+            ```
+
+            Remember to:
+            - Be transparent about your decisions
+            - Handle edge cases gracefully
+            - Document all actions taken
+            - Consider safety and code quality
+
+      # T020: Error handling and fallback strategy
+      - name: Handle analysis errors
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Post error message to issue
+          gh issue comment ${{ steps.issue-data.outputs.issue_number }} --body "## ⚠️ Completion Analysis Failed
+
+          The automated completion analysis encountered an error.
+
+          **Manual Review Required**: Please review the child agent reports manually.
+
+          Child Count: ${{ github.event.client_payload.child_count }}
+          Expected Count: ${{ github.event.client_payload.expected_count }}
+
+          Error details have been logged to the workflow run:
+          https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Final status update
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Add label to track analysis completion
+          if [ "${{ job.status }}" == "success" ]; then
+            gh issue edit ${{ steps.issue-data.outputs.issue_number }} \
+              --add-label "analyzed:complete" || true
+          else
+            gh issue edit ${{ steps.issue-data.outputs.issue_number }} \
+              --add-label "analyzed:error" || true
+          fi

@@ -94,7 +94,10 @@ class TestGenerateComparison:
 
         data = extract_comparison_data(child_results)
         assert len(data) == 2
-        assert all("framework" in item for item in data)
+        assert all("Name" in item for item in data)
+        # Check that the framework names are preserved
+        assert any("FastAPI" in str(item.values()) for item in data)
+        assert any("Flask" in str(item.values()) for item in data)
 
     def test_handle_missing_fields(self):
         """Should handle missing fields gracefully"""

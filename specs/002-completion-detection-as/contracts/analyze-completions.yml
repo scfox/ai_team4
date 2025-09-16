@@ -1,0 +1,114 @@
+# Contract: Analyze Completions Endpoint
+# Called via repository_dispatch when all children have reported
+
+name: analyze_completions
+description: Analyze all child status reports and make merge decisions
+trigger: repository_dispatch
+
+## Input (Repository Dispatch Payload)
+input:
+  event_type: "analyze_completions"
+  client_payload:
+    issue_number: integer
+    expected_count: integer
+    actual_count: integer
+    timestamp: string
+
+## Processing
+steps:
+  - name: fetch_issue
+    action: github.issues.get
+    params:
+      issue_number: input.issue_number
+    output: issue_data
+
+  - name: fetch_comments
+    action: github.issues.listComments
+    params:
+      issue_number: input.issue_number
+    output: all_comments
+
+  - name: filter_child_comments
+    source: all_comments
+    filter: body contains "🤖 Child"
+    output: child_comments
+
+  - name: prepare_claude_prompt
+    template: |
+      Analyze these child agent completion reports:
+      Issue #{{ issue_number }}
+      Expected: {{ expected_count }} children
+      Reported: {{ actual_count }} children
+
+      Comments:
+      {{ child_comments }}
+
+      Tasks:
+      1. Identify successful children (with PR numbers)
+      2. Identify failed children (with reasons)
+      3. Determine merge strategy
+      4. Execute merges if appropriate
+      5. Create summary comment
+
+  - name: invoke_claude
+    action: claude-agent-run
+    params:
+      system_prompt: prepared_prompt
+      oauth_token: secrets.CLAUDE_CODE_OAUTH_TOKEN
+    output: claude_response
+
+  - name: parse_analysis
+    source: claude_response
+    extract:
+      - merge_strategy
+      - prs_to_merge
+      - reasoning
+      - summary
+
+## Output (GitHub Actions)
+output:
+  actions:
+    - type: merge_prs
+      prs: prs_to_merge
+      target_branch: parent_branch
+
+    - type: create_pr
+      condition: merge_strategy == "MERGE_ALL" or "MERGE_PARTIAL"
+      from: parent_branch
+      to: main
+      title: "Consolidation PR for Issue #{{ issue_number }}"
+
+    - type: post_comment
+      target: issue
+      content: summary
+
+## Success Criteria
+assertions:
+  - All child comments are fetched
+  - Claude receives complete context
+  - Merge strategy is valid enum value
+  - PRs exist before merge attempt
+  - Summary comment is posted
+
+## Error Handling
+errors:
+  - claude_timeout:
+      condition: claude_response == null after 8 minutes
+      fallback: simple_merge_all_strategy
+      notify: post_error_comment
+
+  - merge_conflict:
+      condition: pr.merge fails
+      action: document_in_summary
+      continue: true
+
+  - invalid_pr:
+      condition: pr_number not found
+      action: skip_pr
+      log: warning
+
+## Performance Requirements
+sla:
+  total_time: < 2 minutes
+  claude_time: < 60 seconds
+  merge_time: < 10 seconds per PR

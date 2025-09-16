@@ -1,0 +1,81 @@
+# Contract: Completion Check Endpoint
+# Called by ai-task-router.yml when a child status comment is posted
+
+name: completion_check
+description: Check if all expected child agents have reported status
+trigger: issue_comment
+
+## Input (GitHub Event Payload)
+input:
+  issue:
+    number: integer
+    body: string  # Contains expected child count
+  comment:
+    id: integer
+    body: string  # Must contain "🤖 Child"
+    user:
+      login: string
+      type: string  # Should be "Bot"
+
+## Processing
+steps:
+  - name: validate_comment
+    condition: comment.body contains "🤖 Child"
+    action: continue
+    else: skip
+
+  - name: extract_expected_count
+    source: issue.body
+    patterns:
+      - "Splitting into (\d+) children"
+      - "Creating (\d+) child agents"
+      - "(\d+) parallel tasks"
+    output: expected_count
+
+  - name: count_child_comments
+    action: fetch_all_comments
+    filter: body contains "🤖 Child"
+    unique_by: child_id extraction
+    output: actual_count
+
+  - name: check_completion
+    condition: actual_count >= expected_count
+    action: trigger_analysis
+    else: wait
+
+## Output (Repository Dispatch Event)
+output:
+  event_type: "analyze_completions"
+  client_payload:
+    issue_number: integer
+    expected_count: integer
+    actual_count: integer
+    timestamp: string  # ISO 8601
+
+## Success Criteria
+assertions:
+  - Comment contains required marker
+  - Expected count is extractable (> 0)
+  - Actual count is calculated correctly
+  - Dispatch triggered only when threshold met
+
+## Error Handling
+errors:
+  - missing_marker:
+      condition: "🤖 Child" not in comment
+      action: skip_processing
+
+  - no_expected_count:
+      condition: expected_count == 0
+      action: log_warning
+      continue: true
+
+  - invalid_user:
+      condition: user.type != "Bot"
+      action: log_security_warning
+      continue: false
+
+## Performance Requirements
+sla:
+  processing_time: < 2 seconds
+  memory_usage: < 50MB

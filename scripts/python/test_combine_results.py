@@ -102,8 +102,16 @@ class TestCombineResults:
     def test_format_as_table(self):
         """Should format results as markdown table"""
         results = [
-            {"framework": "FastAPI", "performance": "Excellent", "ease": "Good"},
-            {"framework": "Flask", "performance": "Good", "ease": "Excellent"}
+            {
+                "child_id": 1,
+                "task": "Research FastAPI",
+                "results": {"framework": "FastAPI", "performance": "Excellent", "ease": "Good"}
+            },
+            {
+                "child_id": 2,
+                "task": "Research Flask",
+                "results": {"framework": "Flask", "performance": "Good", "ease": "Excellent"}
+            }
         ]
 
         formatted = format_combined_output(results, "table")
@@ -132,7 +140,8 @@ class TestCombineResults:
         ]
 
         combined = combine_child_results(results)
-        assert "failed" in combined.metadata.get("warnings", "").lower()
+        warnings = combined.metadata.get("warnings", [])
+        assert any("failed" in w.lower() for w in warnings)
         assert combined.metadata["successful_children"] == 1
         assert combined.metadata["failed_children"] == 1
 
@@ -144,7 +153,8 @@ class TestCombineResults:
         ]
 
         combined = combine_child_results(results)
-        assert "timeout" in combined.metadata.get("warnings", "").lower()
+        warnings = combined.metadata.get("warnings", [])
+        assert any("timed out" in w.lower() or "timeout" in w.lower() for w in warnings)
 
     def test_max_children_limit(self):
         """Should handle up to 5 children (constitution limit)"""
