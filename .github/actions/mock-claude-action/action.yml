@@ -1,0 +1,34 @@
+name: 'Mock Claude Code Action'
+description: 'Mock implementation of anthropics/claude-code-action for testing'
+author: 'GitAI Teams Test Suite'
+
+inputs:
+  claude_code_oauth_token:
+    description: 'OAuth token for Claude Code (mocked)'
+    required: true
+  claude_args:
+    description: 'Arguments for Claude'
+    required: false
+  prompt:
+    description: 'The prompt to send to Claude'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run mock Claude action
+      shell: bash
+      run: |
+        echo "::group::Mock Claude Code Action"
+        echo "Token provided: ${{ inputs.claude_code_oauth_token != '' }}"
+        echo "Claude args: ${{ inputs.claude_args }}"
+        echo "::endgroup::"
+
+        # Run the mock entrypoint
+        bash ${{ github.action_path }}/entrypoint.sh
+      env:
+        CLAUDE_PROMPT: ${{ inputs.prompt }}
+        CLAUDE_ARGS: ${{ inputs.claude_args }}
+        MOCK_SCENARIO: ${{ env.MOCK_CLAUDE_SCENARIO }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        ISSUE_NUMBER: ${{ github.event.issue.number }}

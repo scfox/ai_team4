@@ -57,7 +57,6 @@ check_scripts_exist() {
         "scripts/bash/create_pr.sh"
         "scripts/bash/derive_state.sh"
         "scripts/bash/post_comment.sh"
-        "scripts/python/analyze_task.py"
         "scripts/python/combine_results.py"
         "scripts/python/generate_comparison.py"
         "scripts/python/count_completions.py"
@@ -165,7 +164,6 @@ check_python_tests() {
 
     # Check if test files exist
     local test_files=(
-        "test_analyze_task.py"
         "test_combine_results.py"
         "test_generate_comparison.py"
         "test_count_completions.py"

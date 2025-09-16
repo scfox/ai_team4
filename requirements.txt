@@ -9,6 +9,7 @@ pytest-mock==3.14.0
 black==24.8.0
 flake8==7.1.1
 mypy==1.11.2
+pyyaml==6.0.1
 
 # Core dependencies (stdlib only for production)
 # Using only Python standard library for production code

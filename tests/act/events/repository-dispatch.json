@@ -1,0 +1,18 @@
+{
+  "action": "orchestrate_task",
+  "client_payload": {
+    "issue_number": "44",
+    "comment_id": "0",
+    "task": "Analyze this codebase and provide recommendations for improving test coverage"
+  },
+  "repository": {
+    "name": "ai_team4",
+    "full_name": "fox/ai_team4",
+    "owner": {
+      "login": "fox"
+    }
+  },
+  "sender": {
+    "login": "github-actions[bot]"
+  }
+}

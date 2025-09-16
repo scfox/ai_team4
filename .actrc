@@ -1,0 +1,22 @@
+# act configuration for GitAI Teams workflow testing
+# https://github.com/nektos/act
+
+# Use medium Docker image by default (500MB, good balance)
+--container-architecture linux/amd64
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+
+# Reuse containers for faster subsequent runs
+--reuse
+
+# Set default secret file location
+--secret-file .env.act
+
+# Enable verbose output for debugging
+# Uncomment for detailed logs:
+# --verbose
+
+# Default event file (can be overridden with -e flag)
+--eventpath tests/act/events/issue-opened.json
+
+# Use local action directory for mocks
+--action-offline-mode

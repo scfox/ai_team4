@@ -273,6 +273,25 @@ run_integration_tests() {
     fi
 }
 
+# Function to run act tests
+run_act_tests() {
+    print_header "Running act Workflow Tests"
+
+    cd "${PROJECT_ROOT}/tests/act"
+
+    # Make scripts executable
+    chmod +x *.sh lib/*.sh scenarios/*.sh mocks/claude-action/*.sh 2>/dev/null || true
+
+    # Run comprehensive workflow tests
+    if bash test-workflows.sh; then
+        print_color "$GREEN" "✅ Workflow tests completed"
+        return 0
+    else
+        print_color "$YELLOW" "⚠️  Some workflow tests failed"
+        return 1
+    fi
+}
+
 # Function to run all tests
 run_all_tests() {
     print_header "Running All Tests"
@@ -284,6 +303,8 @@ run_all_tests() {
     run_integration_tests || true
     echo ""
     run_trace_tests || true
+    echo ""
+    run_act_tests || true
 }
 
 # Main execution
@@ -304,6 +325,9 @@ main() {
         traces)
             run_trace_tests
             ;;
+        act)
+            run_act_tests
+            ;;
         all)
             run_all_tests
             ;;
@@ -317,6 +341,7 @@ main() {
             echo "  contracts   - Run contract tests"
             echo "  integration - Run integration tests"
             echo "  traces      - Run trace tests"
+            echo "  act         - Run act-based workflow tests"
             echo "  all         - Run all tests"
             echo ""
             echo "Example: $0 python"
@@ -326,7 +351,7 @@ main() {
         *)
             print_color "$RED" "Error: Unknown test suite '$TEST_SUITE'"
             echo ""
-            echo "Available test suites: python, contracts, integration, traces, all"
+            echo "Available test suites: python, contracts, integration, traces, act, all"
             exit 1
             ;;
     esac

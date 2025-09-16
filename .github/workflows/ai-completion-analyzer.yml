@@ -50,8 +50,8 @@ jobs:
           echo "$CHILD_COMMENTS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-          # Count PRs mentioned
-          PR_COUNT=$(echo "$CHILD_COMMENTS" | jq '[.[] | .body | scan("#[0-9]+") | unique] | length')
+          # Count PRs mentioned - fixed to handle scan results properly
+          PR_COUNT=$(echo "$CHILD_COMMENTS" | jq '[.[] | .body | scan("#[0-9]+")]' | jq 'unique | length')
           echo "pr_count=${PR_COUNT}" >> $GITHUB_OUTPUT
 
       # T019: Configure Claude agent invocation with proper system prompt
