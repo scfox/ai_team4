@@ -120,6 +120,12 @@ jobs:
             Parent issue: #${{ github.event.client_payload.issue_number }}"
             ```
 
-            5. Done! The parent will be notified via the PR.
+            5. Post completion marker to parent issue:
+            ```bash
+            gh issue comment ${{ github.event.client_payload.issue_number }} \
+              --body "🤖 Child C${{ github.event.client_payload.child_number }} complete: PR created successfully"
+            ```
+
+            6. Done! The parent will be notified via the completion marker and PR.
 
             Execute these steps now.

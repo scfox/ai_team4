@@ -48,6 +48,16 @@ def count_child_markers(comments: list) -> int:
     return count
 
 
+def word_to_number(word: str) -> Optional[int]:
+    """Convert word numbers to integers."""
+    word_map = {
+        'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4,
+        'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9,
+        'ten': 10
+    }
+    return word_map.get(word.lower())
+
+
 def extract_expected_count(issue_body: str) -> Optional[int]:
     """
     Extract the expected child count from the parent issue body.
@@ -56,6 +66,7 @@ def extract_expected_count(issue_body: str) -> Optional[int]:
     - "Expected children: N"
     - "Child count: N"
     - "N child agents"
+    - "two tasks in child instances"
 
     Args:
         issue_body: GitHub issue body text
@@ -73,13 +84,28 @@ def extract_expected_count(issue_body: str) -> Optional[int]:
     patterns = [
         r'expected\s+children:\s*(\d+)',
         r'child\s+count:\s*(\d+)',
-        r'(\d+)\s+child\s+agents?'
+        r'(\d+)\s+child\s+agents?',
+        r'(\d+)\s+tasks?\s+in\s+child',
+        r'these\s+(\w+)\s+tasks?\s+in\s+child',  # Captures word numbers
+        r'(\d+)\s+(?:different|parallel)\s+.*\s+in\s+parallel',
+        r'Execute\s+these\s+(\w+)\s+tasks?',  # Captures word numbers
+        r'(\d+)\s+different\s+\w+',
+        r'Evaluate\s+(\d+)\s+different',  # For "Evaluate 2 different"
     ]
 
     for pattern in patterns:
         match = re.search(pattern, issue_body, re.IGNORECASE)
         if match:
-            count = int(match.group(1))
+            count_str = match.group(1)
+            # Try to parse as integer first
+            try:
+                count = int(count_str)
+            except ValueError:
+                # Try to convert word to number
+                count = word_to_number(count_str)
+                if count is None:
+                    continue
+
             # Only return non-negative numbers
             if count >= 0:
                 logger.info(f"Extracted expected count: {count} using pattern: {pattern}")
