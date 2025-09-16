@@ -90,13 +90,17 @@ jobs:
 
             Execute this gh command to trigger the orchestrator:
             ```bash
-            # Task is already JSON-escaped
-            TASK_JSON=${{ steps.prepare-task.outputs.task }}
+            # Create proper JSON payload using jq to avoid escaping issues
+            PAYLOAD=$(jq -n \
+              --arg issue_number "${{ github.event.issue.number }}" \
+              --arg comment_id "${{ github.event_name == 'issue_comment' && github.event.comment.id || 0 }}" \
+              --argjson task ${{ steps.prepare-task.outputs.task }} \
+              '{issue_number: $issue_number, comment_id: $comment_id, task: $task}')
 
             gh api "repos/${{ github.repository }}/dispatches" \
               --method POST \
               -f event_type="orchestrate_task" \
-              -f client_payload="{\"issue_number\":\"${{ github.event.issue.number }}\",\"comment_id\":\"${{ github.event_name == 'issue_comment' && github.event.comment.id || 0 }}\",\"task\":${TASK_JSON}}"
+              -f "client_payload=$PAYLOAD"
             ```
 
             This will trigger the ai-task-orchestrator workflow to handle the task.
@@ -108,11 +112,12 @@ jobs:
     name: Check for Child Completions
     runs-on: ubuntu-latest
 
-    # Only run on comment events (not initial issue creation)
+    # Only run on child completion comments (not analysis comments)
     if: |
       github.event_name == 'issue_comment' &&
       github.event.issue.pull_request == null &&
-      contains(github.event.comment.body, '🤖')
+      contains(github.event.comment.body, '🤖 Child') &&
+      !contains(github.event.comment.body, '🤖 Completion Analysis')
 
     permissions:
       contents: read
@@ -180,8 +185,19 @@ jobs:
           echo "threshold_met=$THRESHOLD_MET" >> $GITHUB_OUTPUT
           echo "expected_count=$EXPECTED_COUNT" >> $GITHUB_OUTPUT
 
-      - name: Trigger completion analysis
+      - name: Check if analysis already exists
         if: steps.count.outputs.threshold_met == 'true'
+        id: check-analysis
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if completion analysis comment already exists
+          ANALYSIS_EXISTS=$(echo '${{ steps.get-comments.outputs.comments }}' | jq -r '.[] | select(.body | contains("🤖 Completion Analysis")) | .id' | wc -l)
+          echo "analysis_exists=$ANALYSIS_EXISTS" >> $GITHUB_OUTPUT
+          echo "Analysis comments found: $ANALYSIS_EXISTS"
+
+      - name: Trigger completion analysis
+        if: steps.count.outputs.threshold_met == 'true' && steps.check-analysis.outputs.analysis_exists == '0'
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
