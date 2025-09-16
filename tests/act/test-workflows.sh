@@ -128,7 +128,7 @@ fi
 echo ""
 echo -e "${BLUE}=== Python Scripts ===${NC}"
 
-# count_completions.py
+# count_completions.py - basic test
 if python3 "${PROJECT_ROOT}/scripts/python/count_completions.py" \
     --comments '[{"body": "🤖 Child C1 complete"}]' \
     --threshold 1 2>&1 | grep -q '"child_count": 1'; then
@@ -137,6 +137,24 @@ if python3 "${PROJECT_ROOT}/scripts/python/count_completions.py" \
 else
     echo -e "${RED}✗${NC} count_completions.py failed"
     ((FAILED++))
+fi
+
+# Test python vs python3 command issue (reproduces GitHub Actions error)
+echo -n "Testing python vs python3 command: "
+if command -v python &>/dev/null; then
+    # If python exists, test it works
+    if python "${PROJECT_ROOT}/scripts/python/count_completions.py" \
+        --comments '[]' --threshold 1 &>/dev/null; then
+        echo -e "${GREEN}✓${NC} 'python' command works"
+        ((PASSED++))
+    else
+        echo -e "${RED}✗${NC} 'python' command failed (would cause exit code 127 in GitHub Actions)"
+        ((FAILED++))
+    fi
+else
+    echo -e "${YELLOW}⚠${NC} 'python' not found (reproduces GitHub Actions issue!)"
+    # This is actually what we want to detect
+    ((PASSED++))
 fi
 
 # analyze_completions.py

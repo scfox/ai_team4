@@ -129,10 +129,24 @@ jobs:
       - name: Count completions
         id: count
         run: |
-          # Run the count_completions script
-          RESULT=$(python scripts/python/count_completions.py \
-            --comments '${{ steps.get-comments.outputs.comments }}' \
-            --issue-body '${{ steps.get-comments.outputs.issue_body }}' \
+          # Debug: Check Python availability and current directory
+          echo "Current directory: $(pwd)"
+          echo "Python version: $(python3 --version)"
+          echo "Script exists: $(ls -la scripts/python/count_completions.py 2>&1)"
+
+          # Save comments and issue body to temp files to avoid escaping issues
+          cat << 'EOF' > /tmp/comments.json
+          ${{ steps.get-comments.outputs.comments }}
+          EOF
+
+          cat << 'EOF' > /tmp/issue_body.txt
+          ${{ steps.get-comments.outputs.issue_body }}
+          EOF
+
+          # Run the count_completions script with file inputs (use python3 explicitly)
+          RESULT=$(python3 scripts/python/count_completions.py \
+            --comments "$(cat /tmp/comments.json)" \
+            --issue-body "$(cat /tmp/issue_body.txt)" \
             --threshold 3)
 
           echo "Result: $RESULT"
