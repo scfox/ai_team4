@@ -56,6 +56,24 @@ jobs:
           gh issue edit ${{ github.event.issue.number }} \
             --add-label "trigger:ai-task" || echo "Label might already exist"
 
+      - name: Prepare task text
+        id: prepare-task
+        run: |
+          # Get the task text based on event type
+          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            TASK_TEXT="${{ github.event.comment.body }}"
+          else
+            TASK_TEXT="${{ github.event.issue.body }}"
+          fi
+
+          # Escape the task text for JSON (handle quotes, newlines, backslashes)
+          ESCAPED_TASK=$(echo "$TASK_TEXT" | jq -Rs .)
+
+          # Save to output
+          echo "task<<EOF" >> $GITHUB_OUTPUT
+          echo "$ESCAPED_TASK" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Trigger orchestrator via Claude
         uses: anthropics/claude-code-action@v1
         with:
@@ -69,14 +87,16 @@ jobs:
 
             Issue Number: ${{ github.event.issue.number }}
             Comment ID: ${{ github.event_name == 'issue_comment' && github.event.comment.id || 'none' }}
-            Task: ${{ github.event_name == 'issues' && github.event.issue.body || github.event.comment.body }}
 
             Execute this gh command to trigger the orchestrator:
             ```bash
+            # Task is already JSON-escaped
+            TASK_JSON=${{ steps.prepare-task.outputs.task }}
+
             gh api "repos/${{ github.repository }}/dispatches" \
               --method POST \
               -f event_type="orchestrate_task" \
-              -f client_payload='{"issue_number":"${{ github.event.issue.number }}","comment_id":"${{ github.event_name == 'issue_comment' && github.event.comment.id || 0 }}","task":"${{ github.event_name == 'issues' && github.event.issue.body || github.event.comment.body }}"}'
+              -f client_payload="{\"issue_number\":\"${{ github.event.issue.number }}\",\"comment_id\":\"${{ github.event_name == 'issue_comment' && github.event.comment.id || 0 }}\",\"task\":${TASK_JSON}}"
             ```
 
             This will trigger the ai-task-orchestrator workflow to handle the task.
