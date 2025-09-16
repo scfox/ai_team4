@@ -153,26 +153,38 @@ jobs:
 
       - name: Count completions
         id: count
+        env:
+          COMMENTS_JSON: ${{ steps.get-comments.outputs.comments }}
+          ISSUE_BODY_TEXT: ${{ steps.get-comments.outputs.issue_body }}
         run: |
           # Debug: Check Python availability and current directory
           echo "Current directory: $(pwd)"
           echo "Python version: $(python3 --version)"
           echo "Script exists: $(ls -la scripts/python/count_completions.py 2>&1)"
 
-          # Save comments and issue body to temp files to avoid escaping issues
-          cat << 'EOF' > /tmp/comments.json
-          ${{ steps.get-comments.outputs.comments }}
-          EOF
+          # Save comments and issue body to temp files using environment variables
+          # This avoids issues with heredoc and special characters
+          echo "$COMMENTS_JSON" > /tmp/comments.json
+          echo "$ISSUE_BODY_TEXT" > /tmp/issue_body.txt
 
-          cat << 'EOF' > /tmp/issue_body.txt
-          ${{ steps.get-comments.outputs.issue_body }}
-          EOF
+          # Verify the files were created correctly
+          echo "Comments file size: $(wc -c < /tmp/comments.json)"
+          echo "Issue body file size: $(wc -c < /tmp/issue_body.txt)"
+
+          # Debug: Check if JSON is valid
+          if jq . /tmp/comments.json >/dev/null 2>&1; then
+            echo "Comments JSON is valid"
+          else
+            echo "Comments JSON is invalid, showing first 200 chars:"
+            head -c 200 /tmp/comments.json
+          fi
 
           # Run the count_completions script with file inputs (use python3 explicitly)
           RESULT=$(python3 scripts/python/count_completions.py \
             --comments "$(cat /tmp/comments.json)" \
             --issue-body "$(cat /tmp/issue_body.txt)" \
-            --threshold 3)
+            --threshold 3 \
+            --debug)
 
           echo "Result: $RESULT"
 
