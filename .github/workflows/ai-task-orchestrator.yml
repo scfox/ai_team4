@@ -82,7 +82,7 @@ jobs:
             STATUS COMMENT ID: ${{ env.STATUS_COMMENT_ID }}
 
             Your responsibilities:
-            1. Analyze if the task needs parallelization (use scripts/python/analyze_task.py if it exists)
+            1. Analyze if the task needs parallelization based on the task description
             2. For single tasks: Execute directly and post results to the issue
             3. For parallel tasks: Create child branches and spawn child agents
 
