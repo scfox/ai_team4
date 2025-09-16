@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # T006: Single-task trace test
 # Expected: 2 workflows, 0 children, 0 PRs
+# This test creates its own test issue and triggers the workflow
 
 set -euo pipefail
 
@@ -8,10 +9,12 @@ echo "=== Single Task Trace Test ==="
 echo "Testing @gitaiteams mention with single task (no parallelization)"
 
 # Test configuration
-ISSUE_NUMBER=${1:-42}
+TEST_ISSUE_TITLE="Test: Single Task Trace $(date +%s)"
+TEST_ISSUE_BODY="@gitaiteams please analyze this single task that does not require parallelization"
 EXPECTED_WORKFLOWS=2
 EXPECTED_CHILDREN=0
 EXPECTED_PRS=0
+ISSUE_NUMBER=""
 
 # Colors for output
 RED='\033[0;31m'
@@ -20,9 +23,16 @@ NC='\033[0m' # No Color
 
 # Check workflow runs
 check_workflows() {
-    local count=$(gh run list --workflow=ai-task-orchestrator.yml --limit 100 \
-        --json name,event,conclusion \
-        --jq "[.[] | select(.event == \"repository_dispatch\")] | length" 2>/dev/null || echo "0")
+    # Check for workflows related to our test issue
+    local router_runs=$(gh run list --workflow=ai-task-router.yml --limit 20 \
+        --json name,displayTitle,createdAt \
+        --jq "[.[] | select(.displayTitle | contains(\"#${ISSUE_NUMBER}\") or .createdAt > \"$(date -u -d '2 minutes ago' '+%Y-%m-%dT%H:%M:%S')\")] | length" 2>/dev/null || echo "0")
+
+    local orchestrator_runs=$(gh run list --workflow=ai-task-orchestrator.yml --limit 20 \
+        --json name,event,createdAt \
+        --jq "[.[] | select(.event == \"repository_dispatch\" and .createdAt > \"$(date -u -d '2 minutes ago' '+%Y-%m-%dT%H:%M:%S')\")] | length" 2>/dev/null || echo "0")
+
+    local count=$((router_runs + orchestrator_runs))
 
     if [[ "$count" -eq "$EXPECTED_WORKFLOWS" ]]; then
         echo -e "${GREEN}✓${NC} Workflow count: $count (expected: $EXPECTED_WORKFLOWS)"
@@ -59,9 +69,64 @@ check_prs() {
     fi
 }
 
+# Setup test by creating issue
+setup_test() {
+    echo "Creating test issue..."
+    ISSUE_NUMBER=$(gh issue create \
+        --title "$TEST_ISSUE_TITLE" \
+        --body "$TEST_ISSUE_BODY" \
+        --label "test:trace" \
+        2>/dev/null | grep -oE '[0-9]+$')
+
+    if [[ -z "$ISSUE_NUMBER" ]]; then
+        echo -e "${RED}✗${NC} Failed to create test issue"
+        return 1
+    fi
+
+    echo -e "${GREEN}✓${NC} Created test issue #${ISSUE_NUMBER}"
+
+    # Wait for workflows to trigger and complete
+    echo "Waiting for workflows to complete (max 60 seconds)..."
+    local waited=0
+    while [[ $waited -lt 60 ]]; do
+        local run_count=$(gh run list --workflow=ai-task-router.yml --limit 10 \
+            --json name,event,createdAt \
+            --jq "[.[] | select(.createdAt > \"$(date -u -d '1 minute ago' '+%Y-%m-%dT%H:%M:%S')\")] | length" 2>/dev/null || echo "0")
+
+        if [[ $run_count -gt 0 ]]; then
+            echo "  Workflow triggered, waiting for completion..."
+            sleep 10
+            break
+        fi
+
+        sleep 5
+        ((waited+=5))
+    done
+
+    return 0
+}
+
+# Cleanup test issue
+cleanup_test() {
+    if [[ -n "$ISSUE_NUMBER" ]]; then
+        echo "Cleaning up test issue #${ISSUE_NUMBER}..."
+        gh issue close "$ISSUE_NUMBER" --comment "Test completed" 2>/dev/null || true
+        echo -e "${GREEN}✓${NC} Cleanup complete"
+    fi
+}
+
 # Run all checks
 main() {
     local failed=0
+
+    # Set up the test
+    if ! setup_test; then
+        echo -e "${RED}=== TEST SETUP FAILED ===${NC}"
+        exit 1
+    fi
+
+    # Ensure cleanup happens on exit
+    trap cleanup_test EXIT
 
     echo "Checking single-task execution trace for issue #${ISSUE_NUMBER}..."
     echo ""

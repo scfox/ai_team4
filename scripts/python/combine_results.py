@@ -48,7 +48,8 @@ def combine_child_results(child_results: List[Dict[str, Any]]) -> CombinedResult
     combined_content = []
     for result in child_results:
         child_id = result.get("child_id", "unknown")
-        status = result.get("status", "unknown")
+        # If no status is provided, treat as success (for backward compatibility)
+        status = result.get("status", "success" if "results" in result else "unknown")
 
         # Track child metadata
         child_meta = {
@@ -60,7 +61,7 @@ def combine_child_results(child_results: List[Dict[str, Any]]) -> CombinedResult
         metadata["children"].append(child_meta)
 
         # Handle different statuses
-        if status == "success":
+        if status == "success" or (status == "unknown" and "results" in result):
             metadata["successful_children"] += 1
             child_content = result.get("results", {})
             combined_content.append({

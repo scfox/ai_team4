@@ -82,3 +82,94 @@ jobs:
             This will trigger the ai-task-orchestrator workflow to handle the task.
 
             IMPORTANT: You MUST execute the gh api command above. The CLAUDE_CODE_OAUTH_TOKEN is already available in your environment.
+
+  # T016: Check for child completions in comments
+  check-completions:
+    name: Check for Child Completions
+    runs-on: ubuntu-latest
+
+    # Only run on comment events (not initial issue creation)
+    if: |
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request == null &&
+      contains(github.event.comment.body, '🤖')
+
+    permissions:
+      contents: read
+      issues: read
+      actions: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Get issue comments
+        id: get-comments
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get all comments for the issue
+          COMMENTS=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments" --paginate)
+          echo "comments<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMENTS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          # Get issue body for expected count
+          ISSUE_BODY=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}" --jq '.body')
+          echo "issue_body<<EOF" >> $GITHUB_OUTPUT
+          echo "$ISSUE_BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Count completions
+        id: count
+        run: |
+          # Run the count_completions script
+          RESULT=$(python scripts/python/count_completions.py \
+            --comments '${{ steps.get-comments.outputs.comments }}' \
+            --issue-body '${{ steps.get-comments.outputs.issue_body }}' \
+            --threshold 3)
+
+          echo "Result: $RESULT"
+
+          # Parse the JSON result
+          CHILD_COUNT=$(echo "$RESULT" | jq -r '.child_count')
+          THRESHOLD_MET=$(echo "$RESULT" | jq -r '.threshold_met')
+          EXPECTED_COUNT=$(echo "$RESULT" | jq -r '.expected_count')
+
+          echo "child_count=$CHILD_COUNT" >> $GITHUB_OUTPUT
+          echo "threshold_met=$THRESHOLD_MET" >> $GITHUB_OUTPUT
+          echo "expected_count=$EXPECTED_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Trigger completion analysis
+        if: steps.count.outputs.threshold_met == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: |
+            --allowed-tools Bash(gh:*)
+          prompt: |
+            # T018: Trigger completion analysis via repository_dispatch
+
+            Child completion threshold has been met for issue #${{ github.event.issue.number }}.
+
+            Child Count: ${{ steps.count.outputs.child_count }}
+            Expected Count: ${{ steps.count.outputs.expected_count }}
+
+            Execute this command to trigger the completion analyzer:
+            ```bash
+            gh api "repos/${{ github.repository }}/dispatches" \
+              --method POST \
+              -f event_type="analyze_completions" \
+              -f client_payload='{
+                "issue_number": "${{ github.event.issue.number }}",
+                "child_count": "${{ steps.count.outputs.child_count }}",
+                "expected_count": "${{ steps.count.outputs.expected_count }}"
+              }'
+            ```
+
+            This will trigger the ai-completion-analyzer workflow to analyze child completions.

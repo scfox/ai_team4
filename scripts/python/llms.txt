@@ -1,0 +1,197 @@
+# Python Scripts for GitAI Teams Completion Detection
+
+This document provides AI-friendly documentation for the Python scripts used in the GitAI Teams completion detection system.
+
+## count_completions.py
+
+### Purpose
+Count child agent completion markers in GitHub issue comments to determine when all child agents have reported their status.
+
+### Functions
+
+#### count_child_markers(comments: list) -> int
+Counts the number of comments containing the '🤖 Child' marker.
+- **Input**: List of GitHub issue comments (JSON objects with 'body' field)
+- **Output**: Integer count of comments with child markers
+- **Behavior**: Checks for variations like '🤖 Child', '🤖  Child', '🤖Child'
+
+#### extract_expected_count(issue_body: str) -> Optional[int]
+Extracts the expected child count from the parent issue body.
+- **Input**: GitHub issue body text
+- **Output**: Expected count if found, None otherwise
+- **Patterns detected**:
+  - "Expected children: N"
+  - "Child count: N"
+  - "N child agents"
+
+### CLI Usage
+
+```bash
+# Count child markers in comments
+python3 count_completions.py \
+  --comments '[{"body": "🤖 Child C1 complete"}]' \
+  --threshold 3
+
+# With issue body to extract expected count
+python3 count_completions.py \
+  --comments '[{"body": "🤖 Child C1 complete"}]' \
+  --issue-body "Splitting into 3 children" \
+  --threshold 3
+
+# Enable debug logging
+python3 count_completions.py \
+  --comments '[{"body": "🤖 Child C1 complete"}]' \
+  --debug
+```
+
+### Output Format
+JSON object with:
+- `child_count`: Number of child markers found
+- `expected_count`: Expected number from issue body (or null)
+- `threshold_met`: Boolean indicating if threshold is met
+- `threshold`: The threshold value used
+
+### Example Output
+```json
+{
+  "child_count": 2,
+  "expected_count": 3,
+  "threshold_met": false,
+  "threshold": 3
+}
+```
+
+## analyze_completions.py
+
+### Purpose
+Analyze child agent completion status from comments and determine the appropriate merge strategy.
+
+### Functions
+
+#### detect_status_type(child_status: str) -> str
+Detects the status type from a child agent's reported status.
+- **Input**: Status text from child agent
+- **Output**: 'success', 'failure', 'partial', or 'unknown'
+- **Detection logic**:
+  - Checks for partial completion first (e.g., "some tests failing")
+  - Then checks for failure keywords (fail, error, block, cannot, ❌)
+  - Then checks for success keywords (complet, success, done, finish, merg, pass, ✅)
+  - Defaults to 'unknown' if no patterns match
+
+#### determine_merge_strategy(statuses: list) -> Dict[str, Any]
+Determines the merge strategy based on child statuses.
+- **Input**: List of child status types
+- **Output**: Dictionary with strategy and confidence
+- **Strategies**:
+  - `MERGE_ALL`: All children successful
+  - `MERGE_PARTIAL`: >50% success rate
+  - `MANUAL_REVIEW`: <50% success or partial completions
+  - `ABORT`: All failed or no results
+
+#### parse_claude_response(response_text: str) -> Dict[str, Any]
+Parses Claude's response to extract completion analysis.
+- **Input**: Claude's response text (JSON or plain text)
+- **Output**: Parsed analysis with status and recommendations
+- **Handles**:
+  - JSON formatted responses
+  - Plain text responses with pattern matching
+  - Error detection
+
+### CLI Usage
+
+```bash
+# Parse a single child status
+python3 analyze_completions.py \
+  --parse-status "🤖 Child C1 complete: PR #10 ready"
+
+# Analyze child statuses from JSON
+python3 analyze_completions.py \
+  --child-statuses '[{"status": "success"}, {"status": "failure"}]'
+
+# Parse Claude's response
+python3 analyze_completions.py \
+  --claude-response "Strategy: MERGE_PARTIAL\nPR #10, PR #11"
+
+# Enable debug logging
+python3 analyze_completions.py \
+  --child-statuses '[{"status": "success"}]' \
+  --debug
+```
+
+### Output Format
+JSON object with analysis results:
+```json
+{
+  "merge_strategy": {
+    "strategy": "MERGE_PARTIAL",
+    "confidence": 0.75
+  },
+  "claude_analysis": {
+    "status": "partial",
+    "confidence": 0.8,
+    "summary": "2 of 3 children succeeded"
+  }
+}
+```
+
+## Integration with Workflows
+
+Both scripts are designed to be called from GitHub Actions workflows:
+
+### In ai-task-router.yml
+```yaml
+- name: Check completion status
+  run: |
+    COUNT_RESULT=$(python3 scripts/python/count_completions.py \
+      --comments "$COMMENTS_JSON" \
+      --issue-body "$ISSUE_BODY" \
+      --threshold 3)
+    echo "completion_status=$COUNT_RESULT" >> $GITHUB_OUTPUT
+```
+
+### In ai-completion-analyzer.yml
+```yaml
+- name: Analyze child statuses
+  run: |
+    ANALYSIS=$(python3 scripts/python/analyze_completions.py \
+      --child-statuses "$CHILD_STATUSES")
+    echo "analysis=$ANALYSIS" >> $GITHUB_OUTPUT
+```
+
+## Logging
+
+Both scripts use Python's standard logging module:
+- **Default level**: INFO
+- **Format**: `%(asctime)s - %(name)s - %(levelname)s - %(message)s`
+- **Debug mode**: Use `--debug` flag to enable DEBUG level logging
+
+## Error Handling
+
+- Invalid JSON inputs return error messages with details
+- Missing required arguments show help text
+- All errors are logged with appropriate levels (ERROR, WARNING)
+- Scripts return non-zero exit codes on failure
+
+## Performance Characteristics
+
+- **count_completions.py**: O(n) where n is number of comments
+- **analyze_completions.py**: O(n) where n is number of child statuses
+- Both scripts process in < 1 second for typical workloads
+- Memory usage: Minimal, proportional to input size
+
+## Testing
+
+Unit tests are available in:
+- `test_count_completions.py`
+- `test_analyze_completions.py`
+
+Run tests with:
+```bash
+pytest scripts/python/test_*.py -v --cov=scripts/python
+```
+
+## Dependencies
+
+- Python 3.11+
+- Standard library only (no external dependencies)
+- Compatible with GitHub Actions Python environment
